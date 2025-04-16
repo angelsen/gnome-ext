@@ -99,6 +99,7 @@ export async function createCommand(name: string | undefined, options: CreateOpt
     fs.mkdirSync(path.join(projectDir, 'src', 'lib'), { recursive: true });
     fs.mkdirSync(path.join(projectDir, 'scripts'), { recursive: true });
     fs.mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'src', 'types'), { recursive: true });
     
     // Template source directory
     const templateDir = path.join(__dirname, '..', '..', 'src', 'templates', answers.template);
@@ -123,6 +124,7 @@ export async function createCommand(name: string | undefined, options: CreateOpt
     createTsConfig(projectDir, templateData);
     createMetadataJson(projectDir, templateData);
     createExtensionTs(projectDir, templateData, answers.template);
+    createEsbuildConfig(projectDir, templateData);
     createScripts(projectDir, templateData);
     
     // Initialize git repository if not disabled
@@ -150,9 +152,8 @@ export async function createCommand(name: string | undefined, options: CreateOpt
     console.log(chalk.blue('\nNext steps:'));
     console.log(chalk.white(`  1. cd ${dirName}`));
     console.log(chalk.white('  2. npm run build'));
-    console.log(chalk.white('  3. npm run pack'));
-    console.log(chalk.white('  4. npm run install-extension'));
-    console.log(chalk.white('  5. npm run dev'));
+    console.log(chalk.white('  3. npm run install-extension'));
+    console.log(chalk.white('  4. npm run dev'));
     
   } catch (error) {
     console.error(chalk.red('\nError creating extension:'), error);
@@ -167,14 +168,20 @@ function createPackageJson(projectDir: string, data: ExtensionConfig) {
   "description": "${data.description}",
   "type": "module",
   "scripts": {
-    "build": "bash scripts/build.sh",
-    "pack": "bash scripts/pack.sh",
+    "clear": "rm -rf dist",
+    "build": "node esbuild.js",
+    "rebuild": "npm run clear && npm run build",
     "install-extension": "bash scripts/install.sh",
     "dev": "bash scripts/dev.sh",
-    "dev:watch": "nodemon --watch src -e ts,json --exec npm run dev"
+    "dev:watch": "nodemon --watch src -e ts,json --exec npm run dev",
+    "validate": "tsc --noEmit"
   },
   "devDependencies": {
     "@girs/gnome-shell": "^48.0.0",
+    "@girs/gjs": "^4.0.0-beta.23",
+    "@girs/st-16": "^16.0.0-4.0.0-beta.23",
+    "adm-zip": "^0.5.16",
+    "esbuild": "^0.25.1",
     "typescript": "^5.3.0",
     "nodemon": "^3.0.1"
   }
@@ -186,18 +193,24 @@ function createTsConfig(projectDir: string, data: ExtensionConfig) {
   const content = `{
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext"],
     "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
     "outDir": "dist",
-    "baseUrl": ".",
-    "paths": {
-      "resource:///org/gnome/shell/*": ["node_modules/@girs/gnome-shell/resources/*"],
-      "gi://*": ["node_modules/@girs/*"]
-    }
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "files": ["src/extension.ts"]
 }`;
   fs.writeFileSync(path.join(projectDir, 'tsconfig.json'), content);
 }
@@ -217,51 +230,111 @@ function createExtensionTs(projectDir: string, data: ExtensionConfig, template: 
   let content = '';
   
   if (template === 'basic') {
-    content = `import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
+    content = `import '@girs/gjs'; // For global types like 'log()'
+import '@girs/gnome-shell/extensions/global'; // For global shell types
+import { Extension } from '@girs/gnome-shell/extensions/extension';
 
 export default class MyExtension extends Extension {
-  enable() {
+  override enable() {
     log(\`\${this.metadata.name} enabled\`);
   }
 
-  disable() {
+  override disable() {
     log(\`\${this.metadata.name} disabled\`);
   }
 }`;
   } else if (template === 'indicator') {
-    content = `import St from "gi://St";
-import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
-import * as Main from "resource:///org/gnome/shell/ui/main.js";
-import * as PanelMenu from "resource:///org/gnome/shell/ui/panelMenu.js";
+    content = `import '@girs/gjs'; // For global types like 'log()'
+import St from '@girs/st-16';
+
+import '@girs/gnome-shell/extensions/global'; // For global shell types
+import { Extension } from '@girs/gnome-shell/extensions/extension';
+import PanelMenu from '@girs/gnome-shell/ui/panelMenu';
+import * as Main from '@girs/gnome-shell/ui/main';
 
 export default class MyExtension extends Extension {
-  #indicator: PanelMenu.Button | undefined;
+  private _indicator: PanelMenu.Button | null = null;
 
-  enable() {
+  override enable() {
     // Create a panel button
-    this.#indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
+    this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
 
     // Add an icon
     const icon = new St.Icon({
       icon_name: 'dialog-information-symbolic',
       style_class: 'system-status-icon',
     });
-    this.#indicator.add_child(icon);
+    this._indicator.add_child(icon);
 
     // Add the indicator to the panel
-    Main.panel.addToStatusArea(this.uuid, this.#indicator);
+    Main.panel.addToStatusArea(this.uuid, this._indicator);
+    
+    log(\`\${this.metadata.name} enabled\`);
   }
 
-  disable() {
-    if (this.#indicator) {
-      this.#indicator.destroy();
-      this.#indicator = undefined;
+  override disable() {
+    if (this._indicator) {
+      this._indicator.destroy();
+      this._indicator = null;
     }
   }
 }`;
   }
   
   fs.writeFileSync(path.join(projectDir, 'src/extension.ts'), content);
+}
+
+function createEsbuildConfig(projectDir: string, data: ExtensionConfig) {
+  const content = `import { build } from 'esbuild';
+import { copyFileSync, readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import AdmZip from 'adm-zip';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const metadata = JSON.parse(readFileSync('./src/metadata.json', 'utf8'));
+
+console.debug(\`Building \${metadata.name} v\${metadata.version}...\`);
+
+build({
+    entryPoints: ['src/extension.ts'],
+    outdir: 'dist',
+    bundle: true,
+    // Do not remove the functions \`enable()\`, \`disable()\`
+    treeShaking: false,
+    // firefox78 support is sufficient for GNOME Shell 45+
+    target: 'firefox78',
+    platform: 'neutral',
+    format: 'esm',
+    external: ['gi://*', 'resource://*', 'system', 'gettext', 'cairo'],
+}).then(() => {
+    const metaSrc = resolve(__dirname, 'src/metadata.json');
+    const metaDist = resolve(__dirname, 'dist/metadata.json');
+    const zipFilename = \`\${metadata.uuid}.zip\`;
+    const zipDist = resolve(__dirname, zipFilename);
+    copyFileSync(metaSrc, metaDist);
+    
+    // Copy any assets if they exist
+    try {
+      if (fs.existsSync('src/assets')) {
+        fs.mkdirSync('dist/assets', { recursive: true });
+        fs.copySync('src/assets', 'dist/assets');
+      }
+    } catch (error) {
+      console.log('No assets to copy');
+    }
+
+    const zip = new AdmZip();
+    zip.addLocalFolder(resolve(__dirname, 'dist'));
+    zip.writeZip(zipDist);
+
+    console.log(\`Build complete. Zip file: \${zipFilename}\\n\`);
+    console.log(\`Install with: gnome-extensions install \${zipFilename}\`);
+    console.log(\`Update with: gnome-extensions install --force \${zipFilename}\`);
+    console.log(\`Enable with: gnome-extensions enable \${metadata.uuid}\`);
+});
+`;
+  fs.writeFileSync(path.join(projectDir, 'esbuild.js'), content);
 }
 
 function createScripts(projectDir: string, data: ExtensionConfig) {
@@ -299,40 +372,31 @@ echo "Done! Package created in dist/"`;
   const installSh = `#!/bin/bash
 
 echo "Installing extension..."
-if [ ! -d "dist" ]; then
+if [ ! -f "${data.uuid}.zip" ]; then
   echo "Building extension first..."
   npm run build
-  npm run pack
 fi
 
-cd dist || { echo "Error: dist directory does not exist. Run 'npm run build' first."; exit 1; }
-file=\$(find *.zip 2>/dev/null)
-
-if [ -z "$file" ]; then
-  echo "No zip file found. Packaging extension first..."
-  cd ..
-  npm run pack
-  cd dist || exit 1
-  file=\$(find *.zip)
-fi
-
-gnome-extensions install "$file" \\
+# Install the extension
+gnome-extensions install "${data.uuid}.zip" \\
   --force
 
-echo "Extension installed!"`;
+# Print enable instructions
+echo "Extension installed!"
+echo "You can enable it with: gnome-extensions enable ${data.uuid}"`;
   fs.writeFileSync(path.join(projectDir, 'scripts/install.sh'), installSh, { mode: 0o755 });
 
   // dev.sh
   const devSh = `#!/bin/bash
 
 RESOLUTION=\${1:-"1920x1080"}
-EXTENSION_UUID=\$(grep -o '"uuid": *"[^"]*"' dist/metadata.json | cut -d'"' -f4)
+EXTENSION_UUID="${data.uuid}"
 
 echo "Starting nested GNOME Shell with resolution: \$RESOLUTION"
 echo "Extension UUID: \$EXTENSION_UUID"
 
 # Build and install the extension
-npm run build
+npm run rebuild
 npm run install-extension
 
 # Start the nested shell
@@ -349,3 +413,4 @@ gnome-terminal --app-id=org.gnome.Terminal.GnomeShell -- bash -c "gnome-extensio
 wait \$SHELL_PID`;
   fs.writeFileSync(path.join(projectDir, 'scripts/dev.sh'), devSh, { mode: 0o755 });
 }
+
