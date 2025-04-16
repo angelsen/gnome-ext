@@ -150,8 +150,9 @@ export async function createCommand(name: string | undefined, options: CreateOpt
     console.log(chalk.blue('\nNext steps:'));
     console.log(chalk.white(`  1. cd ${dirName}`));
     console.log(chalk.white('  2. npm run build'));
-    console.log(chalk.white('  3. npm run install'));
-    console.log(chalk.white('  4. npm run dev'));
+    console.log(chalk.white('  3. npm run pack'));
+    console.log(chalk.white('  4. npm run install-extension'));
+    console.log(chalk.white('  5. npm run dev'));
     
   } catch (error) {
     console.error(chalk.red('\nError creating extension:'), error);
@@ -168,12 +169,12 @@ function createPackageJson(projectDir: string, data: ExtensionConfig) {
   "scripts": {
     "build": "bash scripts/build.sh",
     "pack": "bash scripts/pack.sh",
-    "install": "bash scripts/install.sh",
+    "install-extension": "bash scripts/install.sh",
     "dev": "bash scripts/dev.sh",
     "dev:watch": "nodemon --watch src -e ts,json --exec npm run dev"
   },
   "devDependencies": {
-    "@girs/gnome-shell": "^45.0.0",
+    "@girs/gnome-shell": "^48.0.0",
     "typescript": "^5.3.0",
     "nodemon": "^3.0.1"
   }
@@ -206,7 +207,7 @@ function createMetadataJson(projectDir: string, data: ExtensionConfig) {
   "name": "${data.name}",
   "description": "${data.description}",
   "uuid": "${data.uuid}",
-  "shell-version": ["45"],
+  "shell-version": ["45", "46", "47", "48"],
   "url": ""
 }`;
   fs.writeFileSync(path.join(projectDir, 'src/metadata.json'), content);
@@ -298,8 +299,22 @@ echo "Done! Package created in dist/"`;
   const installSh = `#!/bin/bash
 
 echo "Installing extension..."
-cd dist
-file=\$(find *.zip)
+if [ ! -d "dist" ]; then
+  echo "Building extension first..."
+  npm run build
+  npm run pack
+fi
+
+cd dist || { echo "Error: dist directory does not exist. Run 'npm run build' first."; exit 1; }
+file=\$(find *.zip 2>/dev/null)
+
+if [ -z "$file" ]; then
+  echo "No zip file found. Packaging extension first..."
+  cd ..
+  npm run pack
+  cd dist || exit 1
+  file=\$(find *.zip)
+fi
 
 gnome-extensions install "$file" \\
   --force
@@ -318,7 +333,7 @@ echo "Extension UUID: \$EXTENSION_UUID"
 
 # Build and install the extension
 npm run build
-npm run install
+npm run install-extension
 
 # Start the nested shell
 MUTTER_DEBUG_DUMMY_MODE_SPECS=\$RESOLUTION dbus-run-session -- gnome-shell --nested --wayland &
