@@ -1,6 +1,7 @@
 import { execa } from 'execa';
 import fs from 'fs-extra';
 import chalk from 'chalk';
+import path from 'path';
 
 interface BuildOptions {
   watch?: boolean;
@@ -14,13 +15,25 @@ export async function buildCommand(options: BuildOptions) {
       return;
     }
     
-    // Check if build script exists
-    if (fs.existsSync('scripts/build.sh')) {
-      // Execute build script
+    console.log(chalk.blue('Building extension...'));
+    
+    // Check if esbuild.js exists
+    if (fs.existsSync('esbuild.js')) {
+      // Use esbuild directly
+      try {
+        await execa('node', ['esbuild.js'], { stdio: 'inherit' });
+        console.log(chalk.green('Build complete!'));
+      } catch (error) {
+        console.error(chalk.red('Error running esbuild:'), error);
+        return;
+      }
+    } else if (fs.existsSync('scripts/build.sh')) {
+      // Fall back to build script
       await execa('bash', ['scripts/build.sh'], { stdio: 'inherit' });
     } else {
       // Fallback to direct TypeScript compilation
-      console.log(chalk.blue('Building extension...'));
+      console.log(chalk.yellow('No esbuild.js found, falling back to TypeScript compiler.'));
+      console.log(chalk.yellow('For better performance, consider adding an esbuild.js file.'));
       
       // Ensure dist directory exists
       fs.mkdirSync('dist', { recursive: true });
@@ -35,6 +48,11 @@ export async function buildCommand(options: BuildOptions) {
         fs.copySync('src/assets', 'dist/assets');
       }
       
+      // Copy stylesheet.css if it exists
+      if (fs.existsSync('src/stylesheet.css')) {
+        fs.copySync('src/stylesheet.css', 'dist/stylesheet.css');
+      }
+      
       // Compile TypeScript
       await execa('npx', ['tsc'], { stdio: 'inherit' });
       
@@ -44,8 +62,15 @@ export async function buildCommand(options: BuildOptions) {
     // Start watching if requested
     if (options.watch) {
       console.log(chalk.blue('Watching for changes...'));
-      await execa('npx', ['nodemon', '--watch', 'src', '-e', 'ts,json', '--exec', 'npm run build'], 
-        { stdio: 'inherit' });
+      if (fs.existsSync('esbuild.js')) {
+        // Use nodemon to watch with esbuild
+        await execa('npx', ['nodemon', '--watch', 'src', '-e', 'ts,json,css', '--exec', 'node esbuild.js'], 
+          { stdio: 'inherit' });
+      } else {
+        // Fall back to TypeScript watch mode
+        await execa('npx', ['nodemon', '--watch', 'src', '-e', 'ts,json,css', '--exec', 'npm run build'], 
+          { stdio: 'inherit' });
+      }
     }
   } catch (error) {
     console.error(chalk.red('Build failed:'), error);

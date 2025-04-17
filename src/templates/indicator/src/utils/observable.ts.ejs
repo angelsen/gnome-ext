@@ -1,0 +1,161 @@
+/**
+ * Observable pattern implementation for GNOME Shell extensions
+ * Based on the gTile/gTile observable implementation
+ */
+
+/**
+ * A callback that consumes an event of type T
+ */
+export type Listener<T> = (value: T) => void;
+
+/**
+ * Observable value that notifies listeners when it changes
+ */
+export class Observable<T> {
+  private _value: T;
+  private _listeners: Set<Listener<T>> = new Set();
+  
+  /**
+   * Create a new Observable with an initial value
+   * @param initialValue The initial value
+   */
+  constructor(initialValue: T) {
+    this._value = initialValue;
+  }
+  
+  /**
+   * Get the current value
+   */
+  get value(): T {
+    return this._value;
+  }
+  
+  /**
+   * Set a new value and notify listeners if it changed
+   */
+  set value(newValue: T) {
+    const changed = this._value !== newValue;
+    this._value = newValue;
+    
+    if (changed) {
+      this._notifyListeners();
+    }
+  }
+  
+  /**
+   * Update the value without comparing to the current value
+   * Always notifies listeners
+   * @param newValue The new value
+   */
+  update(newValue: T): void {
+    this._value = newValue;
+    this._notifyListeners();
+  }
+  
+  /**
+   * Subscribe to value changes
+   * @param listener The callback to invoke when the value changes
+   * @returns A function that unsubscribes the listener when called
+   */
+  subscribe(listener: Listener<T>): () => void {
+    this._listeners.add(listener);
+    
+    // Return unsubscribe function
+    return () => {
+      this._listeners.delete(listener);
+    };
+  }
+  
+  /**
+   * Manually notify all listeners
+   * Useful when you've made changes to a complex object inside the value
+   */
+  notify(): void {
+    this._notifyListeners();
+  }
+  
+  /**
+   * Call all registered listeners with the current value
+   */
+  private _notifyListeners(): void {
+    this._listeners.forEach(listener => {
+      try {
+        listener(this._value);
+      } catch (e) {
+        console.error('Error in observable listener:', e);
+      }
+    });
+  }
+}
+
+/**
+ * A provider of events of type T to all subscribers
+ * Based on the gTile Publisher interface
+ */
+export interface Publisher<T> {
+  /**
+   * Register a callback that is called whenever a new event is published
+   * @param fn The callback function
+   */
+  subscribe(fn: Listener<T>): void;
+}
+
+/**
+ * An event emitter for specific event types
+ */
+export class EventEmitter<T extends string = string> {
+  private _listeners: Map<T, Set<(...args: any[]) => void>> = new Map();
+  
+  /**
+   * Add an event listener
+   * @param event The event type to listen for
+   * @param callback The function to call when the event occurs
+   * @returns A function that removes this listener when called
+   */
+  on(event: T, callback: (...args: any[]) => void): () => void {
+    if (!this._listeners.has(event)) {
+      this._listeners.set(event, new Set());
+    }
+    
+    this._listeners.get(event)!.add(callback);
+    
+    // Return unsubscribe function
+    return () => {
+      this._listeners.get(event)?.delete(callback);
+    };
+  }
+  
+  /**
+   * Emit an event
+   * @param event The event type to emit
+   * @param args Arguments to pass to the listeners
+   */
+  emit(event: T, ...args: any[]): void {
+    if (!this._listeners.has(event)) {
+      return;
+    }
+    
+    this._listeners.get(event)!.forEach(callback => {
+      try {
+        callback(...args);
+      } catch (e) {
+        console.error(`Error in event listener for ${String(event)}:`, e);
+      }
+    });
+  }
+  
+  /**
+   * Remove all listeners for an event type
+   * @param event The event type to clear
+   */
+  clearListeners(event: T): void {
+    this._listeners.delete(event);
+  }
+  
+  /**
+   * Remove all event listeners
+   */
+  destroy(): void {
+    this._listeners.clear();
+  }
+}

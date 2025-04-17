@@ -1,0 +1,45 @@
+/**
+ * Logger type definitions for GNOME Shell extensions
+ */
+
+/**
+ * Console-like interface for logging
+ * Provides typed methods for logging messages with extension context
+ */
+export interface Logger {
+  /**
+   * Log an informational message
+   * Messages are prefixed with the extension name for easier debugging
+   * 
+   * @param message The message to log
+   * @param optionalParams Additional parameters to log
+   */
+  log(message?: any, ...optionalParams: any[]): void;
+  
+  /**
+   * Log a debug message (only shown when debugging is enabled)
+   * Messages are prefixed with the extension name for easier debugging
+   * 
+   * @param message The message to log
+   * @param optionalParams Additional parameters to log
+   */
+  debug(message?: any, ...optionalParams: any[]): void;
+  
+  /**
+   * Log a warning message
+   * Messages are prefixed with the extension name for easier debugging
+   * 
+   * @param message The message to log
+   * @param optionalParams Additional parameters to log
+   */
+  warn(message?: any, ...optionalParams: any[]): void;
+  
+  /**
+   * Log an error message
+   * Messages are prefixed with the extension name for easier debugging
+   * 
+   * @param message The message to log
+   * @param optionalParams Additional parameters to log
+   */
+  error(message?: any, ...optionalParams: any[]): void;
+}

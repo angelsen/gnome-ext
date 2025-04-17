@@ -1,0 +1,58 @@
+/**
+ * Base component class for GNOME Shell extension UI components
+ */
+import { Extension } from '../types/extension';
+import { ResourceManager } from '../utils/resources';
+import { Logger } from '../types/logger';
+
+/**
+ * Base class for extension components
+ * Provides lifecycle management and resource tracking
+ */
+export abstract class Component {
+  protected _extension: Extension;
+  protected _resources: ResourceManager;
+  protected _logger: Logger | null = null;
+  protected _isEnabled: boolean = false;
+
+  /**
+   * Create a new component
+   * @param extension The extension instance
+   */
+  constructor(extension: Extension) {
+    this._extension = extension;
+    this._logger = extension.getTypedLogger();
+    this._resources = new ResourceManager(this._logger);
+  }
+
+  /**
+   * Enable the component
+   * Override this method to initialize your component
+   */
+  enable(): void {
+    if (this._isEnabled) return;
+    this._isEnabled = true;
+  }
+
+  /**
+   * Disable the component
+   * Override this method to clean up your component
+   */
+  disable(): void {
+    if (!this._isEnabled) return;
+    this._isEnabled = false;
+  }
+
+  /**
+   * Destroy the component
+   * Call this when the extension is disabled
+   */
+  destroy(): void {
+    if (this._isEnabled) {
+      this.disable();
+    }
+    
+    // Clean up all signal connections
+    this._resources.destroy();
+  }
+}

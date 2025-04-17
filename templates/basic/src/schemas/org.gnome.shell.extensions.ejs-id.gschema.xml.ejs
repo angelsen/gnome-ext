@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="gnome-shell-extensions">
+  <schema path="/org/gnome/shell/extensions/<%= settingsSchema %>/" id="org.gnome.shell.extensions.<%= settingsSchema %>">
+    
+    <!-- General Settings -->
+    <key name="first-run" type="b">
+      <default>true</default>
+      <summary>First Run</summary>
+      <description>Whether the extension is running for the first time after installation</description>
+    </key>
+
+    <!-- Example Settings (uncomment and customize as needed) -->
+    <!--
+    <key name="example-string" type="s">
+      <default>"default value"</default>
+      <summary>Example String Setting</summary>
+      <description>An example string setting</description>
+    </key>
+
+    <key name="example-integer" type="i">
+      <range min="0" max="100"/>
+      <default>50</default>
+      <summary>Example Integer Setting</summary>
+      <description>An example integer setting with range</description>
+    </key>
+
+    <key name="example-boolean" type="b">
+      <default>true</default>
+      <summary>Example Boolean Setting</summary>
+      <description>An example boolean setting</description>
+    </key>
+
+    <key name="example-enum" type="i">
+      <range min="0" max="2"/>
+      <default>0</default>
+      <summary>Example Enum Setting</summary>
+      <description>An example enum setting (0: first, 1: second, 2: third)</description>
+    </key>
+
+    <key name="example-string-array" type="as">
+      <default>['first', 'second', 'third']</default>
+      <summary>Example String Array Setting</summary>
+      <description>An example string array setting</description>
+    </key>
+
+    <key name="shortcut" type="as">
+      <default><![CDATA[['<Super>e']]]></default>
+      <summary>Keyboard shortcut</summary>
+      <description>Keyboard shortcut to trigger the extension</description>
+    </key>
+    -->
+  </schema>
+</schemalist>

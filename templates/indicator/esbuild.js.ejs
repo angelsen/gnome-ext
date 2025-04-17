@@ -1,0 +1,105 @@
+import { build } from 'esbuild';
+import { copyFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs-extra';
+import AdmZip from 'adm-zip';
+import { spawnSync } from 'child_process';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const metadata = JSON.parse(readFileSync('./src/metadata.json', 'utf8'));
+
+console.debug(`Building ${metadata.name} v${metadata.version}...`);
+
+build({
+    entryPoints: ['src/extension.ts'],
+    outdir: 'dist',
+    bundle: true,
+    // Do not remove the functions `enable()`, `disable()`
+    // This is critical for extensions to work properly
+    treeShaking: false,
+    // firefox78 support is sufficient for GNOME Shell 45+
+    target: 'firefox78',
+    platform: 'neutral',
+    format: 'esm',
+    // Generate source maps for better debugging
+    sourcemap: true,
+    // External modules that should not be bundled
+    external: ['gi://*', 'resource://*', 'system', 'gettext', 'cairo'],
+}).then(() => {
+    const metaSrc = resolve(__dirname, 'src/metadata.json');
+    const metaDist = resolve(__dirname, 'dist/metadata.json');
+    const zipFilename = `${metadata.uuid}.zip`;
+    const zipDist = resolve(__dirname, zipFilename);
+    copyFileSync(metaSrc, metaDist);
+    
+    // Copy any assets if they exist
+    try {
+      if (existsSync('src/assets')) {
+        mkdirSync('dist/assets', { recursive: true });
+        fs.copySync('src/assets', 'dist/assets');
+      }
+      // Copy stylesheet.css if it exists
+      if (existsSync('src/stylesheet.css')) {
+        copyFileSync('src/stylesheet.css', 'dist/stylesheet.css');
+      }
+    } catch (error) {
+      console.log('Error copying assets:', error);
+    }
+    
+    // Process and compile schema files if they exist
+    try {
+      if (existsSync('src/schemas')) {
+        // Create schemas directory in dist
+        const schemaDir = resolve(__dirname, 'dist/schemas');
+        mkdirSync(schemaDir, { recursive: true });
+        
+        // Copy schema files
+        fs.copySync('src/schemas', schemaDir);
+        
+        // Replace placeholders in schema files if needed
+        const schemaFiles = fs.readdirSync(schemaDir);
+        for (const file of schemaFiles) {
+          if (file.endsWith('.gschema.xml')) {
+            console.log(`Processing schema file: ${file}`);
+            
+            // Replace placeholder in schema ID if needed
+            // This is to handle template ID that might have been left in
+            const schemaPath = resolve(schemaDir, file);
+            let schemaContent = fs.readFileSync(schemaPath, 'utf8');
+            if (schemaContent.includes('ejs-id')) {
+              schemaContent = schemaContent.replace(
+                /ejs-id/g, 
+                metadata['settings-schema'] || metadata.uuid.replace(/[^a-zA-Z0-9_]/g, '_')
+              );
+              fs.writeFileSync(schemaPath, schemaContent);
+            }
+          }
+        }
+        
+        // Compile schemas
+        console.log('Compiling schemas...');
+        const result = spawnSync('glib-compile-schemas', [schemaDir], { encoding: 'utf8' });
+        if (result.error) {
+          console.error('Failed to compile schemas:', result.error);
+        } else if (result.stderr) {
+          console.error('Schema compilation warnings/errors:', result.stderr);
+        } else {
+          console.log('Schemas compiled successfully');
+        }
+      }
+    } catch (error) {
+      console.error('Error processing schemas:', error);
+    }
+
+    // Create zip package with AdmZip
+    const zip = new AdmZip();
+    zip.addLocalFolder(resolve(__dirname, 'dist'));
+    zip.writeZip(zipDist);
+
+    console.log(`Build complete. Zip file: ${zipFilename}\n`);
+    console.log(`Install with: gnome-extensions install ${zipFilename}`);
+    console.log(`Update with: gnome-extensions install --force ${zipFilename}`);
+    console.log(`Enable with: gnome-extensions enable ${metadata.uuid}`);
+    console.log('\nUse the dev command for testing in a nested GNOME Shell.');
+});

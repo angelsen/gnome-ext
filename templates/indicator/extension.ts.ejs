@@ -1,0 +1,80 @@
+import '@girs/gjs'; // For global types like 'log()'
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+
+import '@girs/gnome-shell/extensions/global'; // For global shell types
+import { Extension as ShellExtension } from '@girs/gnome-shell/extensions/extension';
+
+// Import utilities and components
+import { Settings } from './utils/settings';
+import { ResourceManager } from './utils/resources';
+import { PanelMenuButton } from './components/panelMenu';
+import { Logger } from './types/logger';
+
+/**
+ * <%= name %> Extension
+ * 
+ * <%= description %>
+ */
+export default class <%= className %> extends ShellExtension {
+  private _logger: Logger | null = null;
+  private _settings: Settings | null = null;
+  private _resources: ResourceManager | null = null;
+  private _panelButton: PanelMenuButton | null = null;
+
+  override enable() {
+    // Initialize logger for better debugging
+    this._logger = this.getLogger() as unknown as Logger;
+    this._logger.log(`${this.metadata.name} enabled`);
+    
+    // Initialize resources manager with logger
+    this._resources = new ResourceManager(this._logger);
+    
+    // Initialize settings manager
+    try {
+      this._settings = new Settings(this);
+    } catch (e) {
+      this._logger.error('Failed to initialize settings:', e);
+    }
+    
+    // Initialize UI components
+    this._panelButton = new PanelMenuButton(this);
+    this._panelButton.enable();
+    
+    // Example of tracking settings changes
+    if (this._settings && this._resources) {
+      const firstRun = this._settings.getBoolean('first-run');
+      
+      if (firstRun) {
+        this._logger.log('Running for the first time');
+        this._settings.setBoolean('first-run', false);
+      }
+    }
+  }
+
+  override disable() {
+    // Clean up all resources when disabled
+    this._logger?.log(`${this.metadata.name} disabled`);
+
+    // Clean up UI components
+    if (this._panelButton) {
+      this._panelButton.destroy();
+      this._panelButton = null;
+    }
+    
+    // Clean up resources
+    if (this._resources) {
+      this._resources.destroy();
+      this._resources = null;
+    }
+
+    // Clean up settings
+    if (this._settings) {
+      this._settings.destroy();
+      this._settings = null;
+    }
+    
+    // Clear logger at the end
+    this._logger = null;
+  }
+}

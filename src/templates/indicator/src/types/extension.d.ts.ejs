@@ -1,0 +1,77 @@
+/**
+ * Extension types for GNOME Shell extensions
+ */
+
+import type { Extension as ShellExtension } from '@girs/gnome-shell/extensions/extension';
+import type { Logger } from './logger';
+
+/**
+ * Extension metadata as defined in metadata.json
+ */
+export interface ExtensionMetadata {
+  /**
+   * The extension name displayed in the UI
+   */
+  name: string;
+  
+  /**
+   * The extension description
+   */
+  description: string;
+  
+  /**
+   * The extension unique identifier
+   */
+  uuid: string;
+  
+  /**
+   * Supported GNOME Shell versions
+   */
+  'shell-version': string[];
+  
+  /**
+   * Settings schema identifier
+   */
+  'settings-schema'?: string;
+  
+  /**
+   * URL to the extension homepage or source code
+   */
+  url?: string;
+  
+  /**
+   * Extension version
+   */
+  version?: string;
+}
+
+/**
+ * Base extension class
+ * Provides typed access to extension metadata and logger
+ */
+export abstract class Extension extends ShellExtension {
+  /**
+   * Extension metadata from metadata.json
+   */
+  declare metadata: ExtensionMetadata;
+  
+  /**
+   * Get a typed logger instance for this extension
+   */
+  getTypedLogger(): Logger {
+    return this.getLogger() as unknown as Logger;
+  }
+
+  /**
+   * Enable the extension
+   * Called when the extension is enabled by the user or system
+   */
+  abstract override enable(): void;
+  
+  /**
+   * Disable the extension
+   * Called when the extension is disabled by the user or system
+   * Make sure to clean up all resources here to prevent memory leaks
+   */
+  abstract override disable(): void;
+}

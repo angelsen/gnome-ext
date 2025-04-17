@@ -18,6 +18,8 @@ interface ExtensionConfig {
   dirName: string;
   uuid: string;
   description: string;
+  className: string;
+  settingsSchema: string;
 }
 
 export async function createCommand(name: string | undefined, options: CreateOptions) {
@@ -45,6 +47,13 @@ export async function createCommand(name: string | undefined, options: CreateOpt
     
     // Generate UUID (domain.user.name)
     let uuid = `gnome-shell-extension-${dirName}`;
+    
+    // Generate className (CamelCase)
+    // Split by spaces and any non-alphanumeric characters (like hyphens)
+    const className = name
+      .split(/[\s\-_]+/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join('') + 'Extension';
     
     // Ask for extension details
     const answers = await inquirer.prompt([
@@ -99,32 +108,112 @@ export async function createCommand(name: string | undefined, options: CreateOpt
     fs.mkdirSync(path.join(projectDir, 'src', 'lib'), { recursive: true });
     fs.mkdirSync(path.join(projectDir, 'scripts'), { recursive: true });
     fs.mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
-    fs.mkdirSync(path.join(projectDir, 'src', 'types'), { recursive: true });
     
-    // Template source directory
-    const templateDir = path.join(__dirname, '..', '..', 'src', 'templates', answers.template);
+    // Template source directory - look in package root templates directory
+    // Resolve from project root rather than relative to dist
+    const projectRoot = path.resolve(__dirname, '..', '..');
+    const templateDir = path.join(projectRoot, 'templates', answers.template);
     
     // Check if template exists
     if (!fs.existsSync(templateDir)) {
-      console.error(chalk.red(`Template '${answers.template}' not found.`));
+      console.error(chalk.red(`Template '${answers.template}' not found at ${templateDir}`));
       return;
     }
+    
+    // Generate settings schema string from uuid
+    const settingsSchema = answers.uuid.replace(/[^a-zA-Z0-9.]/g, '.').toLowerCase();
     
     // Template data for file content
     const templateData: ExtensionConfig = {
       name,
       dirName,
       uuid: answers.uuid,
-      description: answers.description
+      description: answers.description,
+      className,
+      settingsSchema
     };
     
-    // Copy template files
-    // For now we'll create them directly here since we haven't created the templates yet
-    createPackageJson(projectDir, templateData);
-    createTsConfig(projectDir, templateData);
-    createMetadataJson(projectDir, templateData);
-    createExtensionTs(projectDir, templateData, answers.template);
-    createEsbuildConfig(projectDir, templateData);
+    // Process template files
+    const processTemplate = async (templateFile: string, targetPath: string) => {
+      const templateContent = await fs.readFile(path.join(templateDir, templateFile), 'utf-8');
+      const processedContent = ejs.render(templateContent, templateData);
+      await fs.writeFile(targetPath, processedContent);
+    };
+    
+    // Check for and process template files
+    if (fs.existsSync(path.join(templateDir, 'package.json.ejs'))) {
+      await processTemplate('package.json.ejs', path.join(projectDir, 'package.json'));
+    } else {
+      // Fallback to hardcoded template
+      createPackageJson(projectDir, templateData);
+    }
+    
+    if (fs.existsSync(path.join(templateDir, 'tsconfig.json.ejs'))) {
+      await processTemplate('tsconfig.json.ejs', path.join(projectDir, 'tsconfig.json'));
+    } else {
+      createTsConfig(projectDir, templateData);
+    }
+    
+    if (fs.existsSync(path.join(templateDir, 'esbuild.js.ejs'))) {
+      await processTemplate('esbuild.js.ejs', path.join(projectDir, 'esbuild.js'));
+    } else {
+      createEsbuildConfig(projectDir, templateData);
+    }
+    
+    if (fs.existsSync(path.join(templateDir, 'extension.ts.ejs'))) {
+      await processTemplate('extension.ts.ejs', path.join(projectDir, 'src/extension.ts'));
+    } else {
+      createExtensionTs(projectDir, templateData, answers.template);
+    }
+    
+    if (fs.existsSync(path.join(templateDir, 'metadata.json.ejs'))) {
+      await processTemplate('metadata.json.ejs', path.join(projectDir, 'src/metadata.json'));
+    } else {
+      createMetadataJson(projectDir, templateData);
+    }
+    
+    // Process src directory with nested templates
+    const processSrcDirectory = async () => {
+      const srcTemplateDir = path.join(templateDir, 'src');
+      if (fs.existsSync(srcTemplateDir)) {
+        // Process all subdirectories recursively
+        const processDirectory = async (sourceDir: string, targetDir: string) => {
+          // Ensure target directory exists
+          fs.mkdirSync(targetDir, { recursive: true });
+          
+          // Read all files in the source directory
+          const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+          
+          for (const entry of entries) {
+            const sourcePath = path.join(sourceDir, entry.name);
+            const targetPath = path.join(targetDir, entry.name.replace('.ejs', ''));
+            
+            if (entry.isDirectory()) {
+              // Recursively process subdirectory
+              await processDirectory(sourcePath, targetPath);
+            } else if (entry.isFile()) {
+              if (entry.name.endsWith('.ejs')) {
+                // Process EJS template
+                const templateContent = await fs.readFile(sourcePath, 'utf-8');
+                const processedContent = ejs.render(templateContent, templateData);
+                await fs.writeFile(targetPath, processedContent);
+              } else {
+                // Copy file as-is
+                await fs.copyFile(sourcePath, targetPath);
+              }
+            }
+          }
+        };
+        
+        // Start processing from the src directory
+        await processDirectory(srcTemplateDir, path.join(projectDir, 'src'));
+      }
+    };
+    
+    // Process src directory with all nested templates
+    await processSrcDirectory();
+    
+    // Create scripts
     createScripts(projectDir, templateData);
     
     // Initialize git repository if not disabled
@@ -160,7 +249,7 @@ export async function createCommand(name: string | undefined, options: CreateOpt
   }
 }
 
-// Helper functions for creating template files
+// Helper functions for creating template files (fallback)
 function createPackageJson(projectDir: string, data: ExtensionConfig) {
   const content = `{
   "name": "${data.dirName}",
@@ -180,8 +269,10 @@ function createPackageJson(projectDir: string, data: ExtensionConfig) {
     "@girs/gnome-shell": "^48.0.0",
     "@girs/gjs": "^4.0.0-beta.23",
     "@girs/st-16": "^16.0.0-4.0.0-beta.23",
+    "@girs/gobject-2.0": "^2.84.0-4.0.0-beta.23",
     "adm-zip": "^0.5.16",
     "esbuild": "^0.25.1",
+    "fs-extra": "^11.3.0",
     "typescript": "^5.3.0",
     "nodemon": "^3.0.1"
   }
@@ -207,6 +298,7 @@ function createTsConfig(projectDir: string, data: ExtensionConfig) {
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "outDir": "dist",
+    "sourceMap": true,
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*"],
@@ -221,6 +313,7 @@ function createMetadataJson(projectDir: string, data: ExtensionConfig) {
   "description": "${data.description}",
   "uuid": "${data.uuid}",
   "shell-version": ["45", "46", "47", "48"],
+  "settings-schema": "${data.settingsSchema}",
   "url": ""
 }`;
   fs.writeFileSync(path.join(projectDir, 'src/metadata.json'), content);
@@ -232,15 +325,19 @@ function createExtensionTs(projectDir: string, data: ExtensionConfig, template: 
   if (template === 'basic') {
     content = `import '@girs/gjs'; // For global types like 'log()'
 import '@girs/gnome-shell/extensions/global'; // For global shell types
-import { Extension } from '@girs/gnome-shell/extensions/extension';
+import { Extension, gettext as _, type ConsoleLike } from '@girs/gnome-shell/extensions/extension';
 
-export default class MyExtension extends Extension {
+export default class ${data.className} extends Extension {
+  private _console: ConsoleLike | null = null;
+
   override enable() {
-    log(\`\${this.metadata.name} enabled\`);
+    this._console = this.getLogger();
+    this._console.log(\`\${this.metadata.name} enabled\`);
   }
 
   override disable() {
-    log(\`\${this.metadata.name} disabled\`);
+    this._console?.log(\`\${this.metadata.name} disabled\`);
+    this._console = null;
   }
 }`;
   } else if (template === 'indicator') {
@@ -248,14 +345,18 @@ export default class MyExtension extends Extension {
 import St from '@girs/st-16';
 
 import '@girs/gnome-shell/extensions/global'; // For global shell types
-import { Extension } from '@girs/gnome-shell/extensions/extension';
+import { Extension, gettext as _, type ConsoleLike } from '@girs/gnome-shell/extensions/extension';
 import PanelMenu from '@girs/gnome-shell/ui/panelMenu';
 import * as Main from '@girs/gnome-shell/ui/main';
+import PopupMenu from '@girs/gnome-shell/ui/popupMenu';
 
-export default class MyExtension extends Extension {
+export default class ${data.className} extends Extension {
   private _indicator: PanelMenu.Button | null = null;
+  private _console: ConsoleLike | null = null;
 
   override enable() {
+    this._console = this.getLogger();
+    
     // Create a panel button
     this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
 
@@ -265,11 +366,18 @@ export default class MyExtension extends Extension {
       style_class: 'system-status-icon',
     });
     this._indicator.add_child(icon);
+    
+    // Create a menu
+    const menuItem = new PopupMenu.PopupMenuItem(_('Hello World'));
+    menuItem.connect('activate', () => {
+      this._console?.log('Menu item clicked');
+    });
+    this._indicator.menu.addMenuItem(menuItem);
 
     // Add the indicator to the panel
     Main.panel.addToStatusArea(this.uuid, this._indicator);
     
-    log(\`\${this.metadata.name} enabled\`);
+    this._console.log(\`\${this.metadata.name} enabled\`);
   }
 
   override disable() {
@@ -277,6 +385,9 @@ export default class MyExtension extends Extension {
       this._indicator.destroy();
       this._indicator = null;
     }
+    
+    this._console?.log(\`\${this.metadata.name} disabled\`);
+    this._console = null;
   }
 }`;
   }
@@ -286,9 +397,10 @@ export default class MyExtension extends Extension {
 
 function createEsbuildConfig(projectDir: string, data: ExtensionConfig) {
   const content = `import { build } from 'esbuild';
-import { copyFileSync, readFileSync } from 'fs';
+import { copyFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs-extra';
 import AdmZip from 'adm-zip';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -301,11 +413,15 @@ build({
     outdir: 'dist',
     bundle: true,
     // Do not remove the functions \`enable()\`, \`disable()\`
+    // This is critical for extensions to work properly
     treeShaking: false,
     // firefox78 support is sufficient for GNOME Shell 45+
     target: 'firefox78',
     platform: 'neutral',
     format: 'esm',
+    // Generate source maps for better debugging
+    sourcemap: true,
+    // External modules that should not be bundled
     external: ['gi://*', 'resource://*', 'system', 'gettext', 'cairo'],
 }).then(() => {
     const metaSrc = resolve(__dirname, 'src/metadata.json');
@@ -316,14 +432,19 @@ build({
     
     // Copy any assets if they exist
     try {
-      if (fs.existsSync('src/assets')) {
-        fs.mkdirSync('dist/assets', { recursive: true });
+      if (existsSync('src/assets')) {
+        mkdirSync('dist/assets', { recursive: true });
         fs.copySync('src/assets', 'dist/assets');
       }
+      // Copy stylesheet.css if it exists
+      if (existsSync('src/stylesheet.css')) {
+        copyFileSync('src/stylesheet.css', 'dist/stylesheet.css');
+      }
     } catch (error) {
-      console.log('No assets to copy');
+      console.log('Error copying assets:', error);
     }
 
+    // Create zip package with AdmZip
     const zip = new AdmZip();
     zip.addLocalFolder(resolve(__dirname, 'dist'));
     zip.writeZip(zipDist);
@@ -332,42 +453,13 @@ build({
     console.log(\`Install with: gnome-extensions install \${zipFilename}\`);
     console.log(\`Update with: gnome-extensions install --force \${zipFilename}\`);
     console.log(\`Enable with: gnome-extensions enable \${metadata.uuid}\`);
+    console.log('\\nUse the dev command for testing in a nested GNOME Shell.');
 });
 `;
   fs.writeFileSync(path.join(projectDir, 'esbuild.js'), content);
 }
 
 function createScripts(projectDir: string, data: ExtensionConfig) {
-  // build.sh
-  const buildSh = `#!/bin/bash
-
-echo "Building extension..."
-mkdir -p dist
-cp -r src/metadata.json dist/
-# Copy any assets if present
-if [ -d "src/assets" ]; then
-  mkdir -p dist/assets
-  cp -r src/assets/* dist/assets/
-fi
-
-# Compile TypeScript
-npx tsc
-
-echo "Build complete!"`;
-  fs.writeFileSync(path.join(projectDir, 'scripts/build.sh'), buildSh, { mode: 0o755 });
-
-  // pack.sh
-  const packSh = `#!/bin/bash
-
-echo "Packaging extension..."
-cd dist
-gnome-extensions pack \\
-  --force \\
-  --extra-source=lib
-
-echo "Done! Package created in dist/"`;
-  fs.writeFileSync(path.join(projectDir, 'scripts/pack.sh'), packSh, { mode: 0o755 });
-
   // install.sh
   const installSh = `#!/bin/bash
 
@@ -413,4 +505,3 @@ gnome-terminal --app-id=org.gnome.Terminal.GnomeShell -- bash -c "gnome-extensio
 wait \$SHELL_PID`;
   fs.writeFileSync(path.join(projectDir, 'scripts/dev.sh'), devSh, { mode: 0o755 });
 }
-

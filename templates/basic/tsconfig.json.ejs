@@ -1,0 +1,15 @@
+{
+  "extends": "@tsconfig/strictest/tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    // Keep source maps for debugging
+    "sourceMap": true,
+    // Output directory
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "files": ["src/extension.ts"]
+}

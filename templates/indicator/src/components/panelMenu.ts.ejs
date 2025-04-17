@@ -1,0 +1,140 @@
+/**
+ * Panel menu component for GNOME Shell extensions
+ */
+import St from 'gi://St';
+import GObject from 'gi://GObject';
+
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+
+import { Component } from './component';
+import { Extension } from '../types/extension';
+import { Settings } from '../utils/settings';
+
+/**
+ * Panel menu button for the extension
+ * Creates an indicator in the system status area with a popup menu
+ */
+export class PanelMenuButton extends Component {
+  private _indicator: PanelMenu.Button | null = null;
+  private _settings: Settings | null = null;
+  
+  /**
+   * Create a new panel menu button
+   * @param extension The extension instance
+   */
+  constructor(extension: Extension) {
+    super(extension);
+    
+    try {
+      this._settings = new Settings(extension);
+    } catch (e) {
+      this._logger?.error('Failed to initialize settings:', e);
+    }
+  }
+  
+  /**
+   * Enable the panel menu button
+   */
+  override enable(): void {
+    if (this._isEnabled) return;
+    super.enable();
+    
+    try {
+      // Create a panel button
+      this._indicator = new PanelMenu.Button(0.0, this._extension.metadata.name, false);
+      
+      // Add an icon
+      const icon = new St.Icon({
+        icon_name: 'preferences-system-symbolic', // Change to your preferred icon
+        style_class: 'system-status-icon',
+      });
+      this._indicator.add_child(icon);
+      
+      // Add menu items
+      this._buildMenu();
+      
+      // Add the indicator to the panel
+      Main.panel.addToStatusArea(this._extension.uuid, this._indicator);
+      
+      this._logger?.debug('Panel menu enabled');
+    } catch (e) {
+      this._logger?.error('Error enabling panel menu:', e);
+    }
+  }
+  
+  /**
+   * Disable the panel menu button
+   */
+  override disable(): void {
+    if (!this._isEnabled) return;
+    
+    try {
+      if (this._indicator) {
+        this._indicator.destroy();
+        this._indicator = null;
+      }
+      
+      super.disable();
+      this._logger?.debug('Panel menu disabled');
+    } catch (e) {
+      this._logger?.error('Error disabling panel menu:', e);
+    }
+  }
+  
+  /**
+   * Build the menu items
+   */
+  private _buildMenu(): void {
+    if (!this._indicator) return;
+    
+    // Add a sample toggle item
+    const toggleItem = new PopupMenu.PopupSwitchMenuItem(
+      'Example Toggle',
+      this._settings?.getBoolean('first-run') || false
+    );
+    
+    // Connect to the toggle event
+    if (this._settings) {
+      this._resources.connect(toggleItem, 'toggled', (item: PopupMenu.PopupSwitchMenuItem) => {
+        this._logger?.debug(`Toggle switched to: ${item.state}`);
+        this._settings?.setBoolean('first-run', item.state);
+      });
+    }
+    
+    this._indicator.menu.addMenuItem(toggleItem);
+    
+    // Add a separator
+    this._indicator.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+    
+    // Add a simple action item
+    const actionItem = new PopupMenu.PopupMenuItem('Example Action');
+    this._resources.connect(actionItem, 'activate', () => {
+      this._logger?.debug('Action item clicked');
+    });
+    this._indicator.menu.addMenuItem(actionItem);
+    
+    // Add preferences item
+    const prefsItem = new PopupMenu.PopupMenuItem('Preferences');
+    this._resources.connect(prefsItem, 'activate', () => {
+      this._logger?.debug('Opening preferences');
+      // This would typically launch the preferences dialog
+      // We'll add this functionality in a future version
+    });
+    this._indicator.menu.addMenuItem(prefsItem);
+  }
+  
+  /**
+   * Update the menu icon
+   * @param iconName The name of the icon to use
+   */
+  updateIcon(iconName: string): void {
+    if (!this._indicator) return;
+    
+    const icon = this._indicator.get_first_child() as St.Icon;
+    if (icon && icon instanceof St.Icon) {
+      icon.icon_name = iconName;
+    }
+  }
+}

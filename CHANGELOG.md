@@ -18,9 +18,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README.md with usage documentation
 - LICENSE file with MIT license
 - CHANGELOG.md for tracking changes
+- Modern bundling with esbuild
+- TypeScript typing with @girs packages
+- ESM module support
+- Enhanced templates with best practices:
+  - Resource management utilities
+  - Settings management
+  - Component-based architecture
+  - Observable pattern for state management
+  - GSettings schema integration
+  - Keybinding management
+  - Proper error handling and cleanup
+  - Class-based extension pattern
+
+### Fixed
+- Template directory processing for nested template files
+- Class name generation for extension names with special characters
+- Logger initialization to use standard getLogger() method
+- Schema compilation and installation process
+- Package structure for npm publication
 
 ### Todo
-- Improve templates with more features
 - Add tests for commands
 - Create a project website
 - Add more documentation

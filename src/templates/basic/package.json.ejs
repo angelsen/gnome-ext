@@ -1,0 +1,29 @@
+{
+  "name": "<%= dirName %>",
+  "version": "1.0.0",
+  "description": "<%= description %>",
+  "type": "module",
+  "scripts": {
+    "clear": "rm -rf dist",
+    "build": "node esbuild.js",
+    "rebuild": "npm run clear && npm run build",
+    "validate": "tsc --noEmit",
+    "install-extension": "bash scripts/install.sh",
+    "dev": "bash scripts/dev.sh",
+    "dev:watch": "nodemon --watch src -e ts,json --exec npm run dev"
+  },
+  "devDependencies": {
+    "@tsconfig/strictest": "^2.0.5",
+    "adm-zip": "^0.5.16",
+    "esbuild": "^0.25.1",
+    "fs-extra": "^11.3.0",
+    "typescript": "^5.8.2",
+    "nodemon": "^3.0.1"
+  },
+  "dependencies": {
+    "@girs/gjs": "^4.0.0-beta.23",
+    "@girs/gnome-shell": "^48.0.0",
+    "@girs/gobject-2.0": "^2.84.0-4.0.0-beta.23",
+    "@girs/st-16": "^16.0.0-4.0.0-beta.23"
+  }
+}

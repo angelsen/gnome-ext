@@ -1,0 +1,99 @@
+/**
+ * Keyboard shortcut management for GNOME Shell extensions
+ */
+import Gio from 'gi://Gio';
+import Meta from 'gi://Meta';
+import Shell from 'gi://Shell';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { Settings } from './settings';
+import { Logger } from '../types/logger';
+import { Extension } from '../types/extension';
+
+/**
+ * Manages keyboard shortcuts for the extension
+ */
+export class KeybindingManager {
+  private _settings: Settings;
+  private _keybindings: Map<string, number> = new Map();
+  private _logger: Logger | null = null;
+  private _extension: Extension;
+
+  /**
+   * Create a new KeybindingManager
+   * @param extension The extension instance
+   * @param settings The extension settings
+   * @param logger Optional logger instance
+   */
+  constructor(extension: Extension, settings: Settings, logger?: Logger) {
+    this._extension = extension;
+    this._settings = settings;
+    this._logger = logger || null;
+  }
+
+  /**
+   * Set the logger for this manager
+   * @param logger The logger instance
+   */
+  setLogger(logger: Logger): void {
+    this._logger = logger;
+  }
+
+  /**
+   * Listen for a keybinding
+   * @param settingsKey The key in GSettings to get the shortcut from
+   * @param callback The function to call when the shortcut is triggered
+   */
+  listenFor(settingsKey: string, callback: () => void): void {
+    try {
+      // Remove any existing binding for this key
+      this.remove(settingsKey);
+
+      // Register the new keybinding
+      Main.wm.addKeybinding(
+        settingsKey,
+        this._settings['_settings'],
+        Meta.KeyBindingFlags.NONE,
+        Shell.ActionMode.ALL,
+        callback
+      );
+
+      // Track this keybinding
+      this._keybindings.set(settingsKey, 1);
+      this._logger?.debug(`Registered keybinding for ${settingsKey}`);
+    } catch (e) {
+      this._logger?.error(`Failed to register keybinding for ${settingsKey}:`, e);
+    }
+  }
+
+  /**
+   * Stop listening for a keybinding
+   * @param settingsKey The settings key for the shortcut
+   */
+  remove(settingsKey: string): void {
+    try {
+      if (this._keybindings.has(settingsKey)) {
+        Main.wm.removeKeybinding(settingsKey);
+        this._keybindings.delete(settingsKey);
+        this._logger?.debug(`Removed keybinding for ${settingsKey}`);
+      }
+    } catch (e) {
+      this._logger?.error(`Failed to remove keybinding for ${settingsKey}:`, e);
+    }
+  }
+
+  /**
+   * Unregister all keybindings
+   * Call this when the extension is disabled
+   */
+  destroy(): void {
+    try {
+      for (const key of this._keybindings.keys()) {
+        Main.wm.removeKeybinding(key);
+      }
+      this._keybindings.clear();
+      this._logger?.debug('Removed all keybindings');
+    } catch (e) {
+      this._logger?.error('Failed to remove all keybindings:', e);
+    }
+  }
+}

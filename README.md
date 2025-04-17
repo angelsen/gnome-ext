@@ -30,6 +30,9 @@ npm install -g gnome-ext
 - 🧪 **Development Environment**: Integrated development mode with nested GNOME Shell
 - ⚡ **Modern ES Modules**: Built for GNOME Shell 45+ with ES modules support
 - 🎨 **Multiple Templates**: Choose basic or indicator templates for quick starts
+- 🔧 **Advanced Architecture**: Component-based structure with resource management
+- 🛠️ **Settings Integration**: GSettings schema and preferences support
+- 🔄 **State Management**: Observable pattern for reactive UI
 
 ## Requirements
 
@@ -38,6 +41,7 @@ npm install -g gnome-ext
 - GNOME Shell 45+
 - `gnome-extensions` CLI tool
 - `dbus-run-session` for development mode
+- `glib-compile-schemas` for settings compilation
 
 ## Installation
 
@@ -59,8 +63,8 @@ This will prompt for extension details and create a directory with a fully funct
 
 ### Available Templates
 
-- **basic**: Minimal extension with enable/disable methods
-- **indicator**: Extension with panel icon and popup menu
+- **basic**: Minimal extension with enable/disable methods and utilities
+- **indicator**: Extension with panel icon, popup menu and component architecture
 
 ### Building the Extension
 
@@ -96,23 +100,50 @@ Options:
 
 ## Project Structure
 
-The generated extension project follows this structure:
+The generated extension project follows this enhanced structure:
 
 ```
 my-extension/
 ├── src/
-│   ├── extension.ts        # Main extension entry point
-│   ├── metadata.json       # Extension metadata
-│   └── lib/                # Core functionality
+│   ├── extension.ts         # Main extension entry point
+│   ├── metadata.json        # Extension metadata
+│   ├── components/          # UI components
+│   ├── utils/               # Utility functions
+│   │   ├── settings.ts      # Settings management
+│   │   ├── resources.ts     # Resource management
+│   │   ├── keybindings.ts   # Keyboard shortcut management
+│   │   └── observable.ts    # State management
+│   ├── types/               # TypeScript type definitions
+│   ├── schemas/             # GSettings schema files
+│   └── lib/                 # Core functionality
 ├── scripts/
-│   ├── build.sh            # Build script
-│   ├── pack.sh             # Packaging script
-│   ├── install.sh          # Local installation
-│   └── dev.sh              # Development environment
-├── assets/                 # Icons, etc.
-├── package.json            # Node.js config
-└── tsconfig.json           # TypeScript config
+│   ├── build.sh             # Build script
+│   ├── pack.sh              # Packaging script
+│   ├── install.sh           # Local installation
+│   └── dev.sh               # Development environment
+├── assets/                  # Icons, etc.
+├── package.json             # Node.js config
+├── tsconfig.json            # TypeScript config
+└── esbuild.js               # Build configuration
 ```
+
+## Advanced Features
+
+### Resource Management
+
+The templates include a ResourceManager class that helps track and clean up resources like signal connections to prevent memory leaks.
+
+### Settings Integration
+
+Full GSettings integration with typed settings access and automatic schema compilation during the build process.
+
+### Component Architecture
+
+The indicator template includes a component-based architecture for better organization and reusability of UI elements.
+
+### State Management
+
+Observable pattern implementation for reactive UI updates based on state changes.
 
 ## Contributing
 
@@ -130,5 +161,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Inspired by projects like [gTile](https://github.com/gTile/gTile)
+- Inspired by projects like [gTile](https://github.com/gTile/gTile) and [Pano](https://github.com/oae/gnome-shell-pano)
 - Based on the TypeScript declaration files from [gjsify/gnome-shell](https://github.com/gjsify/gnome-shell)

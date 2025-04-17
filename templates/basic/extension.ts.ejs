@@ -1,0 +1,77 @@
+import '@girs/gjs'; // For global types like 'log()'
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+
+import '@girs/gnome-shell/extensions/global'; // For global shell types
+import { Extension as ShellExtension } from '@girs/gnome-shell/extensions/extension';
+
+// Import utilities
+import { Settings } from './utils/settings';
+import { ResourceManager } from './utils/resources';
+import { Logger } from './types/logger';
+
+/**
+ * <%= name %> Extension
+ * 
+ * <%= description %>
+ */
+export default class <%= className %> extends ShellExtension {
+  private _logger: Logger | null = null;
+  private _settings: Settings | null = null;
+  private _resources: ResourceManager | null = null;
+
+  override enable() {
+    // Initialize logger for better debugging
+    this._logger = this.getLogger() as unknown as Logger;
+    this._logger.log(`${this.metadata.name} enabled`);
+    
+    // Initialize resources manager with logger
+    this._resources = new ResourceManager(this._logger);
+    
+    // Initialize settings manager
+    try {
+      this._settings = new Settings(this);
+    } catch (e) {
+      this._logger.error('Failed to initialize settings:', e);
+    }
+    
+    // Example of tracking settings changes
+    if (this._settings && this._resources) {
+      const firstRun = this._settings.getBoolean('first-run');
+      
+      if (firstRun) {
+        this._logger.log('Running for the first time');
+        this._settings.setBoolean('first-run', false);
+      }
+      
+      // Example of connecting to a setting change with resource tracking
+      this._resources.connect(
+        this._settings._settings, 
+        'changed::first-run', 
+        () => {
+          this._logger?.log('First run setting changed');
+        }
+      );
+    }
+  }
+
+  override disable() {
+    // Clean up all resources when disabled
+    this._logger?.log(`${this.metadata.name} disabled`);
+
+    // Clean up resources
+    if (this._resources) {
+      this._resources.destroy();
+      this._resources = null;
+    }
+
+    // Clean up settings
+    if (this._settings) {
+      this._settings.destroy();
+      this._settings = null;
+    }
+    
+    // Clear logger at the end
+    this._logger = null;
+  }
+}

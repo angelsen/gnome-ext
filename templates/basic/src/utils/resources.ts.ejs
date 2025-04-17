@@ -1,0 +1,114 @@
+/**
+ * Resource management utilities for GNOME Shell extensions
+ */
+import { Logger } from '../types/logger';
+
+/**
+ * Manages extension resources like signal connections
+ * Helps prevent memory leaks by tracking and cleaning up resources
+ */
+export class ResourceManager {
+  // Map of sources to their signal connections
+  private _signals: Map<object, Map<number, string>> = new Map();
+  private _logger: Logger | null = null;
+
+  /**
+   * Create a new ResourceManager
+   * @param logger Optional logger instance for debugging
+   */
+  constructor(logger?: Logger) {
+    this._logger = logger || null;
+  }
+
+  /**
+   * Set the logger instance
+   * @param logger Logger instance to use for debugging
+   */
+  setLogger(logger: Logger): void {
+    this._logger = logger;
+  }
+
+  /**
+   * Connect a signal to a source and track it
+   * @param source The object emitting the signal
+   * @param signal The signal name to connect to
+   * @param callback The function to call when the signal is emitted
+   * @returns The signal connection ID
+   */
+  connect(source: any, signal: string, callback: (...args: any[]) => any): number {
+    try {
+      const id = source.connect(signal, callback);
+      if (!this._signals.has(source)) {
+        this._signals.set(source, new Map());
+      }
+      this._signals.get(source)!.set(id, signal);
+      return id;
+    } catch (e) {
+      this._logger?.error(`Failed to connect signal ${signal}:`, e);
+      return 0;
+    }
+  }
+
+  /**
+   * Disconnect a signal from a source
+   * @param source The source object
+   * @param id The connection ID returned from connect()
+   */
+  disconnect(source: any, id?: number): void {
+    try {
+      if (id !== undefined) {
+        // Disconnect a specific signal
+        source.disconnect(id);
+        this._signals.get(source)?.delete(id);
+      } else if (this._signals.has(source)) {
+        // Disconnect all signals from this source
+        const ids = this._signals.get(source)!;
+        ids.forEach((_, id) => source.disconnect(id));
+        this._signals.delete(source);
+      }
+    } catch (e) {
+      this._logger?.error('Failed to disconnect signal:', e);
+    }
+  }
+
+  /**
+   * Get a list of all sources being tracked
+   * @returns Array of source objects
+   */
+  getSources(): any[] {
+    return Array.from(this._signals.keys());
+  }
+
+  /**
+   * Get a list of all signal connections for a source
+   * @param source The source object
+   * @returns Map of connection IDs to signal names
+   */
+  getConnections(source: any): Map<number, string> | undefined {
+    return this._signals.get(source);
+  }
+
+  /**
+   * Check if a source has any connections
+   * @param source The source object
+   * @returns True if the source has connections
+   */
+  hasConnections(source: any): boolean {
+    return this._signals.has(source) && this._signals.get(source)!.size > 0;
+  }
+
+  /**
+   * Disconnect all tracked signals
+   * Call this when your extension is disabled
+   */
+  destroy(): void {
+    this._signals.forEach((ids, source) => {
+      try {
+        ids.forEach((_, id) => source.disconnect(id));
+      } catch (e) {
+        this._logger?.error(`Failed to disconnect signals for source:`, e);
+      }
+    });
+    this._signals.clear();
+  }
+}
